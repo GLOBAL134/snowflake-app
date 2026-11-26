@@ -9,10 +9,6 @@ export function detectInitialLang(): Lang {
   } catch {
     // ignore
   }
-  const nav = (navigator.language || 'en').toLowerCase();
-  if (nav.startsWith('ru') || nav.startsWith('uk') || nav.startsWith('be')) {
-    return 'ru';
-  }
   return 'en';
 }
 
