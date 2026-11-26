@@ -4,6 +4,7 @@ import { StateStore } from './core/state';
 import type { AppSettings, Point, RuntimePlatform } from './core/types';
 import { detectRuntimePlatform, isMobileLike } from './platform/bridge';
 import { MotionWindController } from './platform/motionWind';
+import { Canvas2DSnowRenderer } from './renderer/Canvas2DSnowRenderer';
 import { LiveWallpaperCanvas } from './renderer/LiveWallpaperCanvas';
 import { WebGLSnowRenderer } from './renderer/WebGLSnowRenderer';
 import { mountLandingSite } from './ui/LandingSite';
@@ -162,15 +163,19 @@ function runSnowScene(
   snowCanvas.className = 'snow-canvas';
   appRoot.appendChild(snowCanvas);
 
-  let renderer: WebGLSnowRenderer;
+  let renderer: WebGLSnowRenderer | Canvas2DSnowRenderer;
   try {
     renderer = new WebGLSnowRenderer(snowCanvas);
-  } catch (err) {
-    const msg = document.createElement('div');
-    msg.className = 'fatal-error';
-    msg.textContent = err instanceof Error ? err.message : 'Ошибка инициализации WebGL2';
-    appRoot.appendChild(msg);
-    return;
+  } catch {
+    try {
+      renderer = new Canvas2DSnowRenderer(snowCanvas);
+    } catch (err) {
+      const msg = document.createElement('div');
+      msg.className = 'fatal-error';
+      msg.textContent = err instanceof Error ? err.message : 'Ошибка инициализации графики';
+      appRoot.appendChild(msg);
+      return;
+    }
   }
 
   const getTopInset = () => (isOverlay ? 0 : 0);
@@ -205,7 +210,8 @@ function runSnowScene(
     }
     const isSnowman = s.activeTool === 'snowman' && !s.isPaused;
     snowmanHud.setVisible(isSnowman);
-    snowCanvas.style.pointerEvents = isSnowman || !isOverlay ? 'auto' : 'none';
+    // Keep snowCanvas click-through unless Snowman mode is active so virtual windows remain draggable!
+    snowCanvas.style.pointerEvents = isSnowman ? 'auto' : 'none';
     snowCanvas.style.cursor = isSnowman ? 'crosshair' : 'default';
 
     if (isOverlay && electron) {
@@ -293,60 +299,63 @@ function runSnowScene(
     }
   }
 
-  // Pointer & touch interactions on canvas
+  // Pointer & touch interactions (Snowman rolls on snowCanvas; Mitten listens on window so cards stay draggable)
   let activePointerId: number | null = null;
+  let mittenPointerId: number | null = null;
 
   snowCanvas.addEventListener('pointerdown', (e) => {
     const s = store.get();
-    if (s.isPaused) return;
+    if (s.isPaused || s.activeTool !== 'snowman') return;
     const pt = toBottomLeft(e.clientX, e.clientY, window.innerHeight);
-
-    if (s.activeTool === 'snowman') {
-      activePointerId = e.pointerId;
-      try {
-        snowCanvas.setPointerCapture(e.pointerId);
-      } catch {
-        // ignore
-      }
-      sim.beginRollingBall(pt);
-    } else if (s.activeTool === 'mitten') {
-      activePointerId = e.pointerId;
-      sim.setPointerPosition(pt);
+    activePointerId = e.pointerId;
+    try {
+      snowCanvas.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
     }
+    sim.beginRollingBall(pt);
   });
 
   snowCanvas.addEventListener('pointermove', (e) => {
     const s = store.get();
-    if (s.isPaused) return;
+    if (s.isPaused || s.activeTool !== 'snowman' || activePointerId !== e.pointerId) return;
     const pt = toBottomLeft(e.clientX, e.clientY, window.innerHeight);
-
-    if (s.activeTool === 'snowman' && activePointerId === e.pointerId) {
-      sim.continueRollingBall(pt);
-    } else if (s.activeTool === 'mitten') {
-      // On desktop mouse, hover works without pressing; on touch, move while touching
-      if (e.pointerType === 'mouse' || activePointerId === e.pointerId) {
-        sim.setPointerPosition(pt);
-      }
-    }
+    sim.continueRollingBall(pt);
   });
 
-  const endPointer = (e: PointerEvent) => {
+  const endSnowmanPointer = (e: PointerEvent) => {
     if (activePointerId !== e.pointerId) return;
     activePointerId = null;
     if (store.get().activeTool === 'snowman') {
       sim.releaseRollingBall();
     }
-    if (e.pointerType !== 'mouse') {
-      sim.setPointerPosition(null);
-    }
   };
-  snowCanvas.addEventListener('pointerup', endPointer);
-  snowCanvas.addEventListener('pointercancel', endPointer);
-  snowCanvas.addEventListener('pointerleave', (e) => {
-    if (e.pointerType === 'mouse' && store.get().activeTool === 'mitten') {
-      sim.setPointerPosition(null);
-    }
-  });
+  snowCanvas.addEventListener('pointerup', endSnowmanPointer);
+  snowCanvas.addEventListener('pointercancel', endSnowmanPointer);
+
+  if (!isOverlay) {
+    window.addEventListener('pointerdown', (e) => {
+      const s = store.get();
+      if (s.isPaused || s.activeTool !== 'mitten') return;
+      mittenPointerId = e.pointerId;
+      sim.setPointerPosition(toBottomLeft(e.clientX, e.clientY, window.innerHeight));
+    });
+    window.addEventListener('pointermove', (e) => {
+      const s = store.get();
+      if (s.isPaused || s.activeTool !== 'mitten') return;
+      if (e.pointerType === 'mouse' || mittenPointerId === e.pointerId) {
+        sim.setPointerPosition(toBottomLeft(e.clientX, e.clientY, window.innerHeight));
+      }
+    });
+    const endMitten = (e: PointerEvent) => {
+      if (mittenPointerId === e.pointerId) {
+        mittenPointerId = null;
+        if (e.pointerType !== 'mouse') sim.setPointerPosition(null);
+      }
+    };
+    window.addEventListener('pointerup', endMitten);
+    window.addEventListener('pointercancel', endMitten);
+  }
 
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {

@@ -30,18 +30,15 @@ let currentSettings = {
 
 const devUrl = process.env.SNOWFLAKE_DEV_URL || null;
 
-function buildAppUrl(mode, extra = {}) {
-  const qs = new URLSearchParams({ mode, ...extra }).toString();
+function loadWindow(win, mode, extra = {}) {
+  const query = { mode, ...extra };
   if (devUrl) {
-    return `${devUrl}/?${qs}`;
+    const qs = new URLSearchParams(query).toString();
+    win.loadURL(`${devUrl}/?${qs}`);
+    return;
   }
   const indexHtml = path.join(__dirname, '..', 'dist', 'index.html');
-  return `file://${indexHtml}?${qs}`;
-}
-
-function loadWindow(win, mode, extra = {}) {
-  const url = buildAppUrl(mode, extra);
-  win.loadURL(url);
+  win.loadFile(indexHtml, { query });
 }
 
 function broadcastSettings() {
@@ -86,8 +83,8 @@ function createOverlayWindows() {
       }
     });
 
-    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     if (process.platform === 'darwin') {
+      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       win.setAlwaysOnTop(true, 'pop-up-menu');
     } else {
       win.setAlwaysOnTop(true, 'screen-saver');

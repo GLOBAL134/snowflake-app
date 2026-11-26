@@ -12,6 +12,7 @@ import {
   type TrackedWindow,
   type WindowSnapshot
 } from '../core/types';
+import { Canvas2DSnowRenderer } from '../renderer/Canvas2DSnowRenderer';
 import { LiveWallpaperCanvas } from '../renderer/LiveWallpaperCanvas';
 import { WebGLSnowRenderer } from '../renderer/WebGLSnowRenderer';
 
@@ -79,11 +80,15 @@ export function mountLandingSite(
   snowCanvas.className = 'landing-snow-canvas';
   appRoot.appendChild(snowCanvas);
 
-  let renderer: WebGLSnowRenderer | null = null;
+  let renderer: WebGLSnowRenderer | Canvas2DSnowRenderer | null = null;
   try {
     renderer = new WebGLSnowRenderer(snowCanvas);
   } catch {
-    renderer = null;
+    try {
+      renderer = new Canvas2DSnowRenderer(snowCanvas);
+    } catch {
+      renderer = null;
+    }
   }
 
   const sim = new SnowSimulation(window.innerWidth, window.innerHeight, 0);
@@ -281,16 +286,16 @@ export function mountLandingSite(
               <span class="dl-os-icon">📱</span>
               <div>
                 <h3>iOS (iPhone / iPad)</h3>
-                <span class="dl-meta">iOS 15+ · Установка без App Store</span>
+                <span class="dl-meta">iOS 15+ · Установка через Safari</span>
               </div>
             </div>
-            <p class="dl-desc">Мгновенная установка через Safari на экран «Домой» (PWA) или пакет .ipa для AltStore/Sideloadly.</p>
+            <p class="dl-desc">Apple не разрешает ставить неподписанные .ipa прямо из браузера — установите в 2 касания через Safari («Поделиться» → «На экран „Домой“») или через AltStore/Sideloadly.</p>
             <div class="dl-actions">
               <button type="button" class="sf-btn sf-btn-primary dl-btn sf-ios-guide-btn">
                 📲 Установить на iPhone
               </button>
-              <a href="${DOWNLOAD_URLS.iosIpa}" class="sf-btn dl-btn-sec" download>
-                ⬇ Скачать .ipa
+              <a href="${DOWNLOAD_URLS.iosIpa}" class="sf-btn dl-btn-sec" download title="Требует AltStore / Sideloadly / Xcode">
+                .ipa (AltStore)
               </a>
             </div>
           </div>
