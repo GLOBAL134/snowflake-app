@@ -734,13 +734,14 @@ export function mountLandingSite(
   };
 
   const handleResize = () => {
-    const w = window.innerWidth;
+    const w = document.documentElement.clientWidth || window.innerWidth;
     const h = window.innerHeight;
     wallpaper.resize(w, h);
     renderer?.resize(w, h);
     sim.updateViewport(w, h, 0);
   };
   window.addEventListener('resize', handleResize);
+  window.visualViewport?.addEventListener('resize', handleResize);
 
   // Initial render & check auto-unlock from URL (?unlock=CODE) or saved code
   renderPage();
