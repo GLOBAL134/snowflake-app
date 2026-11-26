@@ -690,12 +690,14 @@ export function mountLandingSite(
       } catch {
         // ignore
       }
-      sim.beginRollingBall({ x: e.clientX, y: window.innerHeight - e.clientY });
+      const cr = snowCanvas.getBoundingClientRect();
+      sim.beginRollingBall({ x: e.clientX - cr.left, y: cr.bottom - e.clientY });
     });
 
     demoStageEl.addEventListener('pointermove', (e) => {
       if (settings.activeTool === 'snowman' && rollingPointerId === e.pointerId) {
-        sim.continueRollingBall({ x: e.clientX, y: window.innerHeight - e.clientY });
+        const cr = snowCanvas.getBoundingClientRect();
+        sim.continueRollingBall({ x: e.clientX - cr.left, y: cr.bottom - e.clientY });
       }
     });
 
@@ -710,21 +712,22 @@ export function mountLandingSite(
 
   window.addEventListener('pointermove', (e) => {
     if (settings.activeTool === 'mitten') {
-      sim.setPointerPosition({ x: e.clientX, y: window.innerHeight - e.clientY });
+      const cr = snowCanvas.getBoundingClientRect();
+      sim.setPointerPosition({ x: e.clientX - cr.left, y: cr.bottom - e.clientY });
     }
   });
 
   const captureDemoSnapshot = (): WindowSnapshot => {
-    const vh = window.innerHeight;
+    const cr = snowCanvas.getBoundingClientRect();
     const windows: TrackedWindow[] = [];
     for (const c of demoCards) {
       const r = c.el.getBoundingClientRect();
-      if (r.bottom < 0 || r.top > vh) continue;
+      if (r.bottom < cr.top || r.top > cr.bottom) continue;
       windows.push({
         id: c.id,
         rect: {
-          x: r.left,
-          y: vh - r.bottom,
+          x: r.left - cr.left,
+          y: cr.bottom - r.bottom,
           width: r.width,
           height: r.height
         }
@@ -734,17 +737,20 @@ export function mountLandingSite(
   };
 
   const handleResize = () => {
-    const w = document.documentElement.clientWidth || window.innerWidth;
-    const h = window.innerHeight;
+    const cr = snowCanvas.getBoundingClientRect();
+    const w = cr.width || document.documentElement.clientWidth || window.innerWidth;
+    const h = cr.height || window.innerHeight;
     wallpaper.resize(w, h);
     renderer?.resize(w, h);
     sim.updateViewport(w, h, 0);
   };
   window.addEventListener('resize', handleResize);
   window.visualViewport?.addEventListener('resize', handleResize);
+  window.visualViewport?.addEventListener('scroll', handleResize);
 
   // Initial render & check auto-unlock from URL (?unlock=CODE) or saved code
   renderPage();
+  handleResize();
 
   const urlCode = new URLSearchParams(window.location.search).get('unlock');
   let savedCode: string | null = null;

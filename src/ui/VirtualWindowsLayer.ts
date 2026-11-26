@@ -182,7 +182,7 @@ export class VirtualWindowsLayer {
     }
   }
 
-  captureSnapshot(viewportHeight: number): WindowSnapshot {
+  captureSnapshot(canvasBottom: number, canvasLeft = 0): WindowSnapshot {
     if (!this.visible) {
       return { windows: [] };
     }
@@ -192,8 +192,8 @@ export class VirtualWindowsLayer {
       windows.push({
         id: card.id,
         rect: {
-          x: r.left,
-          y: viewportHeight - r.bottom,
+          x: r.left - canvasLeft,
+          y: canvasBottom - r.bottom,
           width: r.width,
           height: r.height
         }

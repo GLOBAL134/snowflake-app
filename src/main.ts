@@ -370,14 +370,16 @@ function runSnowScene(
   });
 
   const handleResize = () => {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    const cr = snowCanvas.getBoundingClientRect();
+    const w = cr.width || window.innerWidth;
+    const h = cr.height || window.innerHeight;
     renderer.resize(w, h);
     wallpaper?.resize(w, h);
     virtualWindows?.handleResize();
     sim.updateViewport(w, h, getTopInset());
   };
   window.addEventListener('resize', handleResize);
+  window.visualViewport?.addEventListener('resize', handleResize);
 
   // Main render loop
   let lastTime = performance.now();
@@ -390,8 +392,9 @@ function runSnowScene(
     const currentSettings = store.get();
 
     if (virtualWindows && currentSettings.virtualWindowsEnabled) {
+      const cr = snowCanvas.getBoundingClientRect();
       sim.syncWindows(
-        virtualWindows.captureSnapshot(window.innerHeight),
+        virtualWindows.captureSnapshot(cr.bottom, cr.left),
         currentSettings.pauseOnFullscreen,
         now * 0.001
       );
