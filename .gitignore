@@ -1,0 +1,11 @@
+node_modules/
+dist/
+release/
+electron/bin/
+.DS_Store
+*.log
+.vercel
+ios/App/build/
+android/.gradle/
+android/app/build/
+android/local.properties

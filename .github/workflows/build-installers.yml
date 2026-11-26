@@ -1,0 +1,114 @@
+name: Build Installers (Mac, Windows, Linux, Android, iOS)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm run cap:sync
+      - name: Build Android APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleDebug
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk SnowFlake-Android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-android-apk
+          path: SnowFlake-Android.apk
+      - name: Upload APK to Release v2.4.0
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload v2.4.0 SnowFlake-Android.apk --clobber || true
+
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run cap:sync
+      - name: Build unsigned iOS IPA
+        working-directory: ios/App
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build SYMROOT=build
+          mkdir -p Payload
+          cp -R build/Release-iphoneos/App.app Payload/
+          zip -r ../../SnowFlake-iOS-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-ios-ipa
+          path: SnowFlake-iOS-unsigned.ipa
+      - name: Upload IPA to Release v2.4.0
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload v2.4.0 SnowFlake-iOS-unsigned.ipa --clobber || true
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: CSC_IDENTITY_AUTO_DISCOVERY=false npm run electron:build:mac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-macos
+          path: |
+            release/*.dmg
+            release/*.pkg
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run electron:build:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-windows
+          path: release/*.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run electron:build:linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-linux
+          path: |
+            release/*.AppImage
+            release/*.deb

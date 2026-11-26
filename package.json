@@ -1,0 +1,92 @@
+{
+  "name": "snowflake-crossplatform",
+  "version": "2.4.0",
+  "description": "SnowFlake — кроссплатформенный зимний оверлей и живые обои (macOS, Windows, Linux, iOS, Android, Web)",
+  "author": "SnowFlake <snowflake@local.app>",
+  "homepage": "https://localhost",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host",
+    "test": "vitest run",
+    "electron:dev": "concurrently -k \"vite --port 5173\" \"wait-on http://localhost:5173 && SNOWFLAKE_DEV_URL=http://localhost:5173 electron .\"",
+    "electron:start": "npm run build && electron .",
+    "electron:build:mac": "npm run build && npm run build:mac-helper && electron-builder --mac",
+    "electron:build:win": "npm run build && electron-builder --win --x64",
+    "electron:build:linux": "npm run build && electron-builder --linux --x64",
+    "build:mac-helper": "mkdir -p electron/bin && swiftc -O electron/macWindowTracker.swift -framework Cocoa -framework CoreGraphics -o electron/bin/snowflake-mac-tracker",
+    "cap:sync": "npm run build && npx cap sync",
+    "cap:ios": "npm run build && npx cap sync ios && npx cap open ios",
+    "cap:android": "npm run build && npx cap sync android && npx cap open android"
+  },
+  "build": {
+    "appId": "com.local.snowflake.app",
+    "productName": "SnowFlake",
+    "directories": {
+      "output": "release"
+    },
+    "asarUnpack": [
+      "electron/bin/**",
+      "electron/macWindowTracker.swift"
+    ],
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.lifestyle",
+      "target": [
+        "dmg",
+        "pkg",
+        "zip"
+      ],
+      "icon": "build/icon.icns"
+    },
+    "pkg": {
+      "installLocation": "/Applications",
+      "allowAnywhere": false,
+      "allowCurrentUserHome": false,
+      "isRelocatable": false
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "Utility"
+    }
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/ios": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.0.0",
+    "concurrently": "^9.1.2",
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0",
+    "vitest": "^3.0.9",
+    "wait-on": "^8.0.3"
+  }
+}
