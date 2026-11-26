@@ -1,10 +1,7 @@
 import { removeBackgroundAndCrop } from '../core/BackgroundRemover';
 import { SnowSimulation } from '../core/SnowSimulation';
 import {
-  GARLAND_MODE_LABELS,
-  INTENSITY_CONFIGS,
   PLOW_STYLES,
-  SNOW_TOOL_LABELS,
   type AppSettings,
   type GarlandMode,
   type SnowIntensity,
@@ -15,18 +12,20 @@ import {
 import { Canvas2DSnowRenderer } from '../renderer/Canvas2DSnowRenderer';
 import { LiveWallpaperCanvas } from '../renderer/LiveWallpaperCanvas';
 import { WebGLSnowRenderer } from '../renderer/WebGLSnowRenderer';
+import { detectInitialLang, saveLang, STRINGS, type Lang } from './i18n';
 
-const RELEASE_BASE = 'https://github.com/GLOBAL134/snowflake-app/releases/download/v2.4.0';
+const TRIBUTE_PAY_URL = 'https://web.tribute.tg/s/1dXM';
+const UNLOCK_STORAGE_KEY = 'snowflake_unlock_code_v1';
 
-export const DOWNLOAD_URLS = {
-  macPkg: `${RELEASE_BASE}/SnowFlake-2.4.0-arm64.pkg`,
-  macDmg: `${RELEASE_BASE}/SnowFlake-2.4.0-arm64.dmg`,
-  winExe: `${RELEASE_BASE}/SnowFlake-Setup-2.4.0-x64.exe`,
-  linuxDeb: `${RELEASE_BASE}/snowflake-crossplatform_2.4.0_amd64.deb`,
-  linuxAppImage: `${RELEASE_BASE}/SnowFlake-2.4.0.AppImage`,
-  androidApk: `${RELEASE_BASE}/SnowFlake-Android.apk`,
-  iosIpa: `${RELEASE_BASE}/SnowFlake-iOS-unsigned.ipa`
-};
+interface DownloadLinks {
+  macPkg: string;
+  macDmg: string;
+  winExe: string;
+  linuxDeb: string;
+  linuxAppImage: string;
+  androidApk: string;
+  iosIpa: string;
+}
 
 type DetectedOS = 'mac' | 'windows' | 'linux' | 'android' | 'ios';
 
@@ -49,6 +48,29 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+async function verifyUnlockCode(code: string): Promise<DownloadLinks | null> {
+  try {
+    const res = await fetch('./api/unlock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { ok?: boolean; downloads?: DownloadLinks };
+    if (data.ok && data.downloads) {
+      try {
+        localStorage.setItem(UNLOCK_STORAGE_KEY, code.trim());
+      } catch {
+        // ignore
+      }
+      return data.downloads;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function mountLandingSite(
   appRoot: HTMLDivElement,
   initialSettings: AppSettings,
@@ -56,6 +78,8 @@ export function mountLandingSite(
 ): void {
   document.documentElement.classList.add('mode-landing');
 
+  let lang: Lang = detectInitialLang();
+  let downloads: DownloadLinks | null = null;
   let settings: AppSettings = {
     ...initialSettings,
     liveWallpaperEnabled: true,
@@ -66,8 +90,6 @@ export function mountLandingSite(
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredInstallPrompt = e as BeforeInstallPromptEvent;
-    const pwaBtn = appRoot.querySelector('#sf-pwa-install-btn') as HTMLButtonElement | null;
-    if (pwaBtn) pwaBtn.textContent = '📲 Установить приложение (PWA)';
   });
 
   // Fixed background canvases covering viewport
@@ -92,319 +114,17 @@ export function mountLandingSite(
   }
 
   const sim = new SnowSimulation(window.innerWidth, window.innerHeight, 0);
-
   const visitorOS = detectVisitorOS();
-  const primaryCTA = getPrimaryCTA(visitorOS);
 
   const page = document.createElement('div');
   page.className = 'landing-page';
-  page.innerHTML = `
-    <header class="land-nav">
-      <a href="#" class="land-logo">
-        <span aria-hidden="true">❄️</span>
-        <span>SnowFlake</span>
-        <span class="land-badge">v2.4</span>
-      </a>
-      <nav class="land-links">
-        <a href="#demo">Демо</a>
-        <a href="#features">Возможности</a>
-        <a href="#download">Скачать</a>
-      </nav>
-      <div class="land-nav-actions">
-        <button type="button" class="sf-btn sf-btn-small" id="nav-fullscreen-btn">▶ На весь экран</button>
-        <a href="#download" class="sf-btn sf-btn-small sf-btn-primary">Скачать</a>
-      </div>
-    </header>
-
-    <main class="land-main">
-      <section class="land-hero">
-        <div class="hero-pill">macOS · Windows · Linux · Android · iOS</div>
-        <h1 class="hero-title">Зимняя атмосфера и физика снега для любого вашего устройства</h1>
-        <p class="hero-sub">
-          Снегопад, настоящие сугробы на окнах и панели задач, качающиеся гирлянды,
-          лепка снеговиков, умный снегоуборщик и живой зимний домик — попробуйте прямо на странице
-          или установите на устройство в один клик.
-        </p>
-        <div class="hero-ctas">
-          <a href="${primaryCTA.href}" class="land-cta-primary" ${primaryCTA.isAnchor ? '' : 'download'}>
-            ${primaryCTA.label}
-          </a>
-          <button type="button" class="land-cta-secondary" id="hero-demo-btn">
-            ✨ Попробовать вживую ниже
-          </button>
-          <button type="button" class="land-cta-ghost" id="hero-fullscreen-btn">
-            🖥 Весь экран (PWA)
-          </button>
-        </div>
-        <div class="hero-platforms-strip">
-          <span>✓ Авто-установщик .pkg/.dmg для Mac</span>
-          <span>✓ One-Click .exe для Windows</span>
-          <span>✓ .apk для Android и PWA для iOS</span>
-        </div>
-      </section>
-
-      <section id="demo" class="land-section">
-        <div class="section-head">
-          <h2>Интерактивная демонстрация</h2>
-          <p>
-            Снег уже падает прямо поверх этой страницы. Потяните окна внизу — гирлянды закачаются,
-            а сугробы осыплются! Переключитесь на <strong>«Снеговик»</strong>, чтобы скатать снежные комы.
-          </p>
-        </div>
-
-        <div class="demo-shell">
-          <div class="demo-controls" id="demo-controls"></div>
-          <div class="demo-stage" id="demo-stage">
-            <div class="demo-stage-hint" id="demo-stage-hint">
-              💡 Двигайте карточки мышью или пальцем — снег осыпается с крыш, а варежка смахивает сугробы
-            </div>
-            <div class="demo-window" data-win-id="demo-1" style="left: 6%; top: 56px; width: 290px; height: 145px;">
-              <div class="vw-titlebar">
-                <span class="vw-dots"><span></span><span></span><span></span></span>
-                <span class="vw-title">❄️ Потяни и потряси окно</span>
-              </div>
-              <div class="vw-body">
-                Сугробы копятся прямо на верхней кромке окна. При резком движении снег рассыпается хлопьями!
-              </div>
-            </div>
-            <div class="demo-window" data-win-id="demo-2" style="right: 6%; top: 138px; width: 280px; height: 138px;">
-              <div class="vw-titlebar">
-                <span class="vw-dots"><span></span><span></span><span></span></span>
-                <span class="vw-title">🚜 Гирлянды и снегоуборщик</span>
-              </div>
-              <div class="vw-body">
-                Нажмите «Выпустить сейчас», чтобы трактор или пингвин проехался по окну и расчистил снег.
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="features" class="land-section">
-        <div class="section-head">
-          <h2>Как работает SnowFlake</h2>
-          <p>Все эффекты работают в реальном времени на GPU (WebGL2 / Metal)</p>
-        </div>
-
-        <div class="features-grid">
-          <article class="feature-card">
-            <div class="feature-icon">🏔</div>
-            <h3>Живые сугробы и перекрытия</h3>
-            <p>Снег плавно нарастает на нижней кромке экрана, Dock/панели задач и заголовках окон, учитывая перекрытие окон друг другом.</p>
-          </article>
-          <article class="feature-card">
-            <div class="feature-icon">🧤</div>
-            <h3>Варежка и Снеговик</h3>
-            <p>Смахивайте снег курсором или пальцем в режиме «Варежка» или скатайте 3 кома и соберите снеговика с шарфом и морковкой.</p>
-          </article>
-          <article class="feature-card">
-            <div class="feature-icon">🚜</div>
-            <h3>Умный снегоуборщик</h3>
-            <p>Трактор, ретро-грузовик, снегоход, пингвин или ваше собственное фото (фон удалится автоматически) с физикой прыжков и подвески.</p>
-          </article>
-          <article class="feature-card">
-            <div class="feature-icon">✨</div>
-            <h3>Качающиеся гирлянды</h3>
-            <p>Огоньки в режиме «Волна» или «Мерцание» крепятся к верхнему краю окон и раскачиваются по законам физики при перемещении.</p>
-          </article>
-          <article class="feature-card">
-            <div class="feature-icon">🏡</div>
-            <h3>Живые обои «Зимний домик»</h3>
-            <p>Звёздное небо, луна, заснеженные ели, дым из трубы и пульсирующий тёплый свет в окнах уютного домика.</p>
-          </article>
-          <article class="feature-card">
-            <div class="feature-icon">📱</div>
-            <h3>Адаптация под все устройства</h3>
-            <p>На Mac и Windows — прозрачный оверлей из трея поверх всех программ; на iOS и Android — touch-управление и ветер от наклона телефона.</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="download" class="land-section">
-        <div class="section-head">
-          <h2>Скачать для всех устройств в 1 клик</h2>
-          <p>Выберите вашу платформу — установка запускается сразу после открытия файла</p>
-        </div>
-
-        <div class="download-grid">
-          <div class="dl-card ${visitorOS === 'mac' ? 'dl-card-featured' : ''}">
-            <div class="dl-head">
-              <span class="dl-os-icon">🍎</span>
-              <div>
-                <h3>macOS</h3>
-                <span class="dl-meta">Apple Silicon (M1–M4) · macOS 12+</span>
-              </div>
-            </div>
-            <p class="dl-desc">Нативный оверлей в меню-баре поверх всех окон, отслеживание Dock и автозапуск.</p>
-            <div class="dl-actions">
-              <a href="${DOWNLOAD_URLS.macPkg}" class="sf-btn sf-btn-primary dl-btn" download>
-                ⬇ Скачать установщик (.pkg)
-              </a>
-              <a href="${DOWNLOAD_URLS.macDmg}" class="sf-btn dl-btn-sec" download>
-                Образ (.dmg)
-              </a>
-            </div>
-          </div>
-
-          <div class="dl-card ${visitorOS === 'windows' ? 'dl-card-featured' : ''}">
-            <div class="dl-head">
-              <span class="dl-os-icon">🪟</span>
-              <div>
-                <h3>Windows ПК</h3>
-                <span class="dl-meta">Windows 10 / 11 (64-bit)</span>
-              </div>
-            </div>
-            <p class="dl-desc">One-Click установщик: открываете файл — приложение само ставится и появляется в трее.</p>
-            <div class="dl-actions">
-              <a href="${DOWNLOAD_URLS.winExe}" class="sf-btn sf-btn-primary dl-btn" download>
-                ⬇ Скачать установщик (.exe)
-              </a>
-            </div>
-          </div>
-
-          <div class="dl-card ${visitorOS === 'android' ? 'dl-card-featured' : ''}">
-            <div class="dl-head">
-              <span class="dl-os-icon">🤖</span>
-              <div>
-                <h3>Android</h3>
-                <span class="dl-meta">Android 8+ · Телефоны и планшеты</span>
-              </div>
-            </div>
-            <p class="dl-desc">Свайпы пальцем, лепка снеговиков, ветер наклоном телефона и живой домик.</p>
-            <div class="dl-actions">
-              <a href="${DOWNLOAD_URLS.androidApk}" class="sf-btn sf-btn-primary dl-btn" download>
-                ⬇ Скачать APK
-              </a>
-              <button type="button" class="sf-btn dl-btn-sec sf-pwa-trigger">
-                📲 Установить PWA
-              </button>
-            </div>
-          </div>
-
-          <div class="dl-card ${visitorOS === 'ios' ? 'dl-card-featured' : ''}">
-            <div class="dl-head">
-              <span class="dl-os-icon">📱</span>
-              <div>
-                <h3>iOS (iPhone / iPad)</h3>
-                <span class="dl-meta">iOS 15+ · Установка через Safari</span>
-              </div>
-            </div>
-            <p class="dl-desc">Apple не разрешает ставить неподписанные .ipa прямо из браузера — установите в 2 касания через Safari («Поделиться» → «На экран „Домой“») или через AltStore/Sideloadly.</p>
-            <div class="dl-actions">
-              <button type="button" class="sf-btn sf-btn-primary dl-btn sf-ios-guide-btn">
-                📲 Установить на iPhone
-              </button>
-              <a href="${DOWNLOAD_URLS.iosIpa}" class="sf-btn dl-btn-sec" download title="Требует AltStore / Sideloadly / Xcode">
-                .ipa (AltStore)
-              </a>
-            </div>
-          </div>
-
-          <div class="dl-card ${visitorOS === 'linux' ? 'dl-card-featured' : ''}">
-            <div class="dl-head">
-              <span class="dl-os-icon">🐧</span>
-              <div>
-                <h3>Linux</h3>
-                <span class="dl-meta">Ubuntu / Debian / AppImage (x64)</span>
-              </div>
-            </div>
-            <p class="dl-desc">Готовый пакет .deb для автоматической установки и универсальный AppImage.</p>
-            <div class="dl-actions">
-              <a href="${DOWNLOAD_URLS.linuxDeb}" class="sf-btn sf-btn-primary dl-btn" download>
-                ⬇ Скачать .deb
-              </a>
-              <a href="${DOWNLOAD_URLS.linuxAppImage}" class="sf-btn dl-btn-sec" download>
-                .AppImage
-              </a>
-            </div>
-          </div>
-
-          <div class="dl-card">
-            <div class="dl-head">
-              <span class="dl-os-icon">🌐</span>
-              <div>
-                <h3>Веб / PWA</h3>
-                <span class="dl-meta">Любой браузер без установки</span>
-              </div>
-            </div>
-            <p class="dl-desc">Запустите полноэкранный SnowFlake прямо сейчас в браузере или установите как веб-приложение.</p>
-            <div class="dl-actions">
-              <button type="button" class="sf-btn sf-btn-primary dl-btn" id="dl-open-web-btn">
-                ▶ Запустить на весь экран
-              </button>
-              <button type="button" class="sf-btn dl-btn-sec" id="sf-pwa-install-btn">
-                📲 Установить PWA
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <footer class="land-footer">
-      <span>❄️ SnowFlake v2.4 — кроссплатформенный зимний оверлей и живые обои</span>
-      <a href="https://github.com/GLOBAL134/snowflake-app" target="_blank" rel="noopener">GitHub проекта</a>
-    </footer>
-
-    <div class="ios-modal hidden" id="ios-install-modal">
-      <div class="ios-modal-card">
-        <div class="sf-header">
-          <strong>📲 Установка на iPhone / iPad / Android</strong>
-          <button type="button" class="sf-icon-close" id="ios-modal-close">✕</button>
-        </div>
-        <ol class="ios-steps">
-          <li>Нажмите кнопку <strong>«Поделиться»</strong> (квадрат со стрелкой вверх) внизу экрана Safari на iPhone или меню <strong>⋮</strong> в Chrome на Android.</li>
-          <li>Выберите пункт <strong>«На экран „Домой“»</strong> (или <strong>«Установить приложение»</strong>).</li>
-          <li>Откройте иконку <strong>SnowFlake</strong> — приложение запустится в полноэкранном режиме без рамок браузера!</li>
-        </ol>
-        <div class="sf-row-gap">
-          <button type="button" class="sf-btn sf-btn-primary sf-flex-1" id="ios-modal-launch">▶ Открыть полноэкранный режим</button>
-          <a href="${DOWNLOAD_URLS.iosIpa}" class="sf-btn" download>Скачать .ipa</a>
-        </div>
-      </div>
-    </div>
-  `;
-
   appRoot.appendChild(page);
-
-  // Wire navigation & fullscreen triggers
-  const openFullscreen = () => onEnterFullscreen();
-  page.querySelector('#nav-fullscreen-btn')!.addEventListener('click', openFullscreen);
-  page.querySelector('#hero-fullscreen-btn')!.addEventListener('click', openFullscreen);
-  page.querySelector('#dl-open-web-btn')!.addEventListener('click', openFullscreen);
-  page.querySelector('#hero-demo-btn')!.addEventListener('click', () => {
-    page.querySelector('#demo')?.scrollIntoView({ behavior: 'smooth' });
-  });
-
-  // PWA & iOS Install modal
-  const iosModal = page.querySelector('#ios-install-modal') as HTMLDivElement;
-  const openInstallHelper = async () => {
-    if (deferredInstallPrompt) {
-      await deferredInstallPrompt.prompt();
-      deferredInstallPrompt = null;
-      return;
-    }
-    iosModal.classList.remove('hidden');
-  };
-  page.querySelector('.sf-ios-guide-btn')?.addEventListener('click', () => iosModal.classList.remove('hidden'));
-  page.querySelector('.sf-pwa-trigger')?.addEventListener('click', () => void openInstallHelper());
-  page.querySelector('#sf-pwa-install-btn')?.addEventListener('click', () => void openInstallHelper());
-  page.querySelector('#ios-modal-close')?.addEventListener('click', () => iosModal.classList.add('hidden'));
-  page.querySelector('#ios-modal-launch')?.addEventListener('click', openFullscreen);
-  iosModal.addEventListener('click', (e) => {
-    if (e.target === iosModal) iosModal.classList.add('hidden');
-  });
-
-  // Build interactive demo controls bar
-  const controlsRoot = page.querySelector('#demo-controls') as HTMLDivElement;
-  const demoStage = page.querySelector('#demo-stage') as HTMLDivElement;
-  const demoHint = page.querySelector('#demo-stage-hint') as HTMLDivElement;
 
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
   fileInput.accept = 'image/png,image/jpeg,image/webp,image/heic,image/gif';
   fileInput.style.display = 'none';
-  page.appendChild(fileInput);
+  document.body.appendChild(fileInput);
 
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
@@ -418,53 +138,416 @@ export function mountLandingSite(
         customPlowVersion: settings.customPlowVersion + 1,
         plowStyle: 'custom'
       };
-      renderControls();
+      renderDemoControls();
       sim.triggerPlowManually(settings.plowOnWindows);
     } catch {
       // ignore invalid file
     }
   });
 
-  const renderControls = () => {
-    controlsRoot.innerHTML = '';
+  // Persistent demo cards (preserved across language switches)
+  const demoCards: DemoCard[] = [];
+  let demoStageEl: HTMLDivElement | null = null;
+  let demoHintEl: HTMLDivElement | null = null;
+  let controlsRootEl: HTMLDivElement | null = null;
+  let rollingPointerId: number | null = null;
 
-    // Row 1: Intensity + Tool + Garland
-    const groupInt = makeControlGroup('Снегопад');
+  function renderPage(): void {
+    const t = STRINGS[lang];
+    const unlocked = downloads !== null;
+    document.documentElement.lang = lang;
+
+    page.innerHTML = `
+      <header class="land-nav">
+        <a href="#" class="land-logo">
+          <span aria-hidden="true">❄️</span>
+          <span>SnowFlake</span>
+          <span class="land-badge">v2.4</span>
+        </a>
+        <nav class="land-links">
+          <a href="#demo">${t.navDemo}</a>
+          <a href="#features">${t.navFeatures}</a>
+          <a href="#download">${t.navDownload}</a>
+        </nav>
+        <div class="land-nav-actions">
+          <button type="button" class="sf-btn sf-btn-small lang-switch-btn" id="lang-toggle-btn">
+            ${lang === 'en' ? '🌐 EN' : '🌐 RU'}
+          </button>
+          <button type="button" class="sf-btn sf-btn-small" id="nav-fullscreen-btn">${t.navFullscreen}</button>
+          <a href="#download" class="sf-btn sf-btn-small sf-btn-primary">${unlocked ? '⬇ Download' : t.navBuy}</a>
+        </div>
+      </header>
+
+      <main class="land-main">
+        <section class="land-hero">
+          <div class="hero-pill">${t.heroPill}</div>
+          <h1 class="hero-title">${t.heroTitle}</h1>
+          <p class="hero-sub">${t.heroSub}</p>
+          <div class="hero-ctas">
+            <button type="button" class="land-cta-primary" id="hero-buy-btn">
+              ${unlocked ? t.heroUnlockedCta : t.heroBuyCta}
+            </button>
+            <button type="button" class="land-cta-secondary" id="hero-demo-btn">
+              ${t.heroTryDemo}
+            </button>
+            <button type="button" class="land-cta-ghost" id="hero-fullscreen-btn">
+              ${t.heroFullscreen}
+            </button>
+          </div>
+          <div class="hero-platforms-strip">
+            <span>${t.heroStrip1}</span>
+            <span>${t.heroStrip2}</span>
+            <span>${t.heroStrip3}</span>
+          </div>
+        </section>
+
+        <section id="demo" class="land-section">
+          <div class="section-head">
+            <h2>${t.demoTitle}</h2>
+            <p>${t.demoSub}</p>
+          </div>
+
+          <div class="demo-shell">
+            <div class="demo-controls" id="demo-controls"></div>
+            <div class="demo-stage ${settings.activeTool === 'snowman' ? 'snowman-active' : ''}" id="demo-stage">
+              <div class="demo-stage-hint" id="demo-stage-hint">
+                ${settings.activeTool === 'snowman' ? t.demoHintSnowman : t.demoHintDefault}
+              </div>
+              <div class="demo-window" data-win-id="demo-1" style="left: 6%; top: 56px; width: 290px; height: 145px;">
+                <div class="vw-titlebar">
+                  <span class="vw-dots"><span></span><span></span><span></span></span>
+                  <span class="vw-title">${t.demoWin1Title}</span>
+                </div>
+                <div class="vw-body">${t.demoWin1Body}</div>
+              </div>
+              <div class="demo-window" data-win-id="demo-2" style="right: 6%; top: 138px; width: 280px; height: 138px;">
+                <div class="vw-titlebar">
+                  <span class="vw-dots"><span></span><span></span><span></span></span>
+                  <span class="vw-title">${t.demoWin2Title}</span>
+                </div>
+                <div class="vw-body">${t.demoWin2Body}</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="features" class="land-section">
+          <div class="section-head">
+            <h2>${t.featuresTitle}</h2>
+            <p>${t.featuresSub}</p>
+          </div>
+
+          <div class="features-grid">
+            ${t.features
+              .map(
+                (f) => `
+              <article class="feature-card">
+                <div class="feature-icon">${f.icon}</div>
+                <h3>${f.title}</h3>
+                <p>${f.desc}</p>
+              </article>
+            `
+              )
+              .join('')}
+          </div>
+        </section>
+
+        <section id="download" class="land-section">
+          <div class="section-head">
+            <h2>${t.dlTitle}</h2>
+            <p>${unlocked ? t.dlSubUnlocked : t.dlSubLocked}</p>
+          </div>
+
+          ${
+            unlocked
+              ? `<div class="unlock-banner unlock-banner-ok"><span>${t.dlUnlockedBadge}</span></div>`
+              : `
+            <div class="unlock-banner">
+              <div class="unlock-banner-text">
+                <strong>${t.dlLockedBannerTitle}</strong>
+                <p>${t.dlLockedBannerDesc}</p>
+              </div>
+              <div class="unlock-banner-actions">
+                <a href="${TRIBUTE_PAY_URL}" target="_blank" rel="noopener" class="land-cta-primary" id="tribute-pay-btn">
+                  ${t.dlPayBtn}
+                </a>
+                <button type="button" class="sf-btn sf-btn-small" id="open-unlock-modal-btn">
+                  ${t.dlHaveCodeBtn}
+                </button>
+              </div>
+            </div>
+          `
+          }
+
+          <div class="download-grid">
+            <div class="dl-card ${visitorOS === 'mac' ? 'dl-card-featured' : ''}">
+              <div class="dl-head">
+                <span class="dl-os-icon">🍎</span>
+                <div>
+                  <h3>macOS</h3>
+                  <span class="dl-meta">${t.dlMacMeta}</span>
+                </div>
+              </div>
+              <p class="dl-desc">${t.dlMacDesc}</p>
+              <div class="dl-actions">
+                ${renderDownloadAction(unlocked ? downloads!.macPkg : null, t.dlMacPkg, t.dlLockedBtnPrefix, true)}
+                ${renderDownloadAction(unlocked ? downloads!.macDmg : null, t.dlMacDmg, t.dlLockedBtnPrefix, false)}
+              </div>
+            </div>
+
+            <div class="dl-card ${visitorOS === 'windows' ? 'dl-card-featured' : ''}">
+              <div class="dl-head">
+                <span class="dl-os-icon">🪟</span>
+                <div>
+                  <h3>Windows PC</h3>
+                  <span class="dl-meta">${t.dlWinMeta}</span>
+                </div>
+              </div>
+              <p class="dl-desc">${t.dlWinDesc}</p>
+              <div class="dl-actions">
+                ${renderDownloadAction(unlocked ? downloads!.winExe : null, t.dlWinExe, t.dlLockedBtnPrefix, true)}
+              </div>
+            </div>
+
+            <div class="dl-card ${visitorOS === 'android' ? 'dl-card-featured' : ''}">
+              <div class="dl-head">
+                <span class="dl-os-icon">🤖</span>
+                <div>
+                  <h3>Android</h3>
+                  <span class="dl-meta">${t.dlAndMeta}</span>
+                </div>
+              </div>
+              <p class="dl-desc">${t.dlAndDesc}</p>
+              <div class="dl-actions">
+                ${renderDownloadAction(unlocked ? downloads!.androidApk : null, t.dlAndApk, t.dlLockedBtnPrefix, true)}
+                <button type="button" class="sf-btn dl-btn-sec sf-pwa-trigger">${t.dlPwaBtn}</button>
+              </div>
+            </div>
+
+            <div class="dl-card ${visitorOS === 'ios' ? 'dl-card-featured' : ''}">
+              <div class="dl-head">
+                <span class="dl-os-icon">📱</span>
+                <div>
+                  <h3>iOS (iPhone / iPad)</h3>
+                  <span class="dl-meta">${t.dlIosMeta}</span>
+                </div>
+              </div>
+              <p class="dl-desc">${t.dlIosDesc}</p>
+              <div class="dl-actions">
+                <button type="button" class="sf-btn sf-btn-primary dl-btn sf-ios-guide-btn">${t.dlIosGuideBtn}</button>
+                ${renderDownloadAction(unlocked ? downloads!.iosIpa : null, t.dlIosIpa, t.dlLockedBtnPrefix, false)}
+              </div>
+            </div>
+
+            <div class="dl-card ${visitorOS === 'linux' ? 'dl-card-featured' : ''}">
+              <div class="dl-head">
+                <span class="dl-os-icon">🐧</span>
+                <div>
+                  <h3>Linux</h3>
+                  <span class="dl-meta">${t.dlLinuxMeta}</span>
+                </div>
+              </div>
+              <p class="dl-desc">${t.dlLinuxDesc}</p>
+              <div class="dl-actions">
+                ${renderDownloadAction(unlocked ? downloads!.linuxDeb : null, t.dlLinuxDeb, t.dlLockedBtnPrefix, true)}
+                ${renderDownloadAction(unlocked ? downloads!.linuxAppImage : null, '.AppImage', t.dlLockedBtnPrefix, false)}
+              </div>
+            </div>
+
+            <div class="dl-card">
+              <div class="dl-head">
+                <span class="dl-os-icon">🌐</span>
+                <div>
+                  <h3>Web / PWA</h3>
+                  <span class="dl-meta">${t.dlWebMeta}</span>
+                </div>
+              </div>
+              <p class="dl-desc">${t.dlWebDesc}</p>
+              <div class="dl-actions">
+                <button type="button" class="sf-btn sf-btn-primary dl-btn" id="dl-open-web-btn">${t.dlWebLaunch}</button>
+                <button type="button" class="sf-btn dl-btn-sec" id="sf-pwa-install-btn">${t.dlPwaBtn}</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="land-footer">
+        <span>${t.footerCopy}</span>
+        <a href="${TRIBUTE_PAY_URL}" target="_blank" rel="noopener">Tribute ($5)</a>
+      </footer>
+
+      <div class="ios-modal hidden" id="pay-unlock-modal">
+        <div class="ios-modal-card">
+          <div class="sf-header">
+            <strong>💳 ${t.payModalTitle}</strong>
+            <button type="button" class="sf-icon-close" id="pay-modal-close">✕</button>
+          </div>
+          <p class="pay-modal-p">${t.payModalStep1}</p>
+          <a href="${TRIBUTE_PAY_URL}" target="_blank" rel="noopener" class="land-cta-primary pay-tribute-cta">
+            ${t.payModalPayLink}
+          </a>
+          <p class="pay-modal-p">${t.payModalStep2}</p>
+          <form class="unlock-form" id="unlock-form">
+            <input type="text" class="unlock-input" id="unlock-code-input" placeholder="${t.dlCodePlaceholder}" autocomplete="off" />
+            <button type="submit" class="sf-btn sf-btn-primary dl-btn">${t.dlUnlockBtn}</button>
+          </form>
+          <div class="unlock-error hidden" id="unlock-error-msg">${t.dlInvalidCode}</div>
+        </div>
+      </div>
+
+      <div class="ios-modal hidden" id="ios-install-modal">
+        <div class="ios-modal-card">
+          <div class="sf-header">
+            <strong>${t.iosModalTitle}</strong>
+            <button type="button" class="sf-icon-close" id="ios-modal-close">✕</button>
+          </div>
+          <ol class="ios-steps">
+            ${t.iosModalSteps.map((s) => `<li>${s}</li>`).join('')}
+          </ol>
+          <div class="sf-row-gap">
+            <button type="button" class="sf-btn sf-btn-primary sf-flex-1" id="ios-modal-launch">${t.iosModalLaunch}</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    wirePageEvents();
+    setupDemoStage();
+    renderDemoControls();
+  }
+
+  function renderDownloadAction(
+    url: string | null,
+    label: string,
+    lockedPrefix: string,
+    primary: boolean
+  ): string {
+    const cls = primary ? 'sf-btn sf-btn-primary dl-btn' : 'sf-btn dl-btn-sec';
+    if (url) {
+      return `<a href="${url}" class="${cls}" download>${label}</a>`;
+    }
+    return `<button type="button" class="${cls} sf-locked-dl-btn">${lockedPrefix}${label}</button>`;
+  }
+
+  function wirePageEvents(): void {
+    page.querySelector('#lang-toggle-btn')!.addEventListener('click', () => {
+      lang = lang === 'en' ? 'ru' : 'en';
+      saveLang(lang);
+      renderPage();
+    });
+
+    const openFullscreen = () => onEnterFullscreen();
+    page.querySelector('#nav-fullscreen-btn')!.addEventListener('click', openFullscreen);
+    page.querySelector('#hero-fullscreen-btn')!.addEventListener('click', openFullscreen);
+    page.querySelector('#dl-open-web-btn')!.addEventListener('click', openFullscreen);
+    page.querySelector('#hero-demo-btn')!.addEventListener('click', () => {
+      page.querySelector('#demo')?.scrollIntoView({ behavior: 'smooth' });
+    });
+
+    const payModal = page.querySelector('#pay-unlock-modal') as HTMLDivElement;
+    const openPayModal = () => {
+      if (downloads) {
+        page.querySelector('#download')?.scrollIntoView({ behavior: 'smooth' });
+        return;
+      }
+      payModal.classList.remove('hidden');
+      const input = page.querySelector('#unlock-code-input') as HTMLInputElement | null;
+      setTimeout(() => input?.focus(), 60);
+    };
+
+    page.querySelector('#hero-buy-btn')!.addEventListener('click', openPayModal);
+    page.querySelector('#open-unlock-modal-btn')?.addEventListener('click', openPayModal);
+    page.querySelectorAll('.sf-locked-dl-btn').forEach((btn) => {
+      btn.addEventListener('click', openPayModal);
+    });
+    page.querySelector('#pay-modal-close')?.addEventListener('click', () => {
+      payModal.classList.add('hidden');
+    });
+    payModal.addEventListener('click', (e) => {
+      if (e.target === payModal) payModal.classList.add('hidden');
+    });
+
+    const unlockForm = page.querySelector('#unlock-form') as HTMLFormElement | null;
+    unlockForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = page.querySelector('#unlock-code-input') as HTMLInputElement;
+      const errEl = page.querySelector('#unlock-error-msg') as HTMLDivElement;
+      errEl.classList.add('hidden');
+      const result = await verifyUnlockCode(input.value);
+      if (result) {
+        downloads = result;
+        payModal.classList.add('hidden');
+        renderPage();
+      } else {
+        errEl.classList.remove('hidden');
+      }
+    });
+
+    // PWA & iOS Install modal
+    const iosModal = page.querySelector('#ios-install-modal') as HTMLDivElement;
+    const openInstallHelper = async () => {
+      if (deferredInstallPrompt) {
+        await deferredInstallPrompt.prompt();
+        deferredInstallPrompt = null;
+        return;
+      }
+      iosModal.classList.remove('hidden');
+    };
+    page.querySelector('.sf-ios-guide-btn')?.addEventListener('click', () => {
+      iosModal.classList.remove('hidden');
+    });
+    page.querySelector('.sf-pwa-trigger')?.addEventListener('click', () => void openInstallHelper());
+    page.querySelector('#sf-pwa-install-btn')?.addEventListener('click', () => void openInstallHelper());
+    page.querySelector('#ios-modal-close')?.addEventListener('click', () => iosModal.classList.add('hidden'));
+    page.querySelector('#ios-modal-launch')?.addEventListener('click', openFullscreen);
+    iosModal.addEventListener('click', (e) => {
+      if (e.target === iosModal) iosModal.classList.add('hidden');
+    });
+  }
+
+  function renderDemoControls(): void {
+    if (!controlsRootEl) return;
+    const t = STRINGS[lang];
+    controlsRootEl.innerHTML = '';
+
+    const groupInt = makeControlGroup(t.ctrlIntensity);
     (['light', 'steady', 'blizzard'] as SnowIntensity[]).forEach((id) => {
-      const b = makeSegBtn(INTENSITY_CONFIGS[id].label, settings.intensity === id, () => {
-        settings = { ...settings, intensity: id };
-        renderControls();
-      });
-      groupInt.appendChild(b);
+      groupInt.appendChild(
+        makeSegBtn(t.intensityLabels[id], settings.intensity === id, () => {
+          settings = { ...settings, intensity: id };
+          renderDemoControls();
+        })
+      );
     });
 
-    const groupTool = makeControlGroup('Инструмент');
+    const groupTool = makeControlGroup(t.ctrlTool);
     (['mitten', 'snowman', 'none'] as SnowTool[]).forEach((id) => {
-      const b = makeSegBtn(SNOW_TOOL_LABELS[id], settings.activeTool === id, () => {
-        settings = { ...settings, activeTool: id };
-        demoStage.classList.toggle('snowman-active', id === 'snowman');
-        demoHint.textContent =
-          id === 'snowman'
-            ? '☃️ Режим снеговика: зажмите и тяните внутри этой области, чтобы скатать шар и поставить на окно!'
-            : '💡 Двигайте карточки мышью или пальцем — снег осыпается с крыш, а варежка смахивает сугробы';
-        renderControls();
-      });
-      groupTool.appendChild(b);
+      groupTool.appendChild(
+        makeSegBtn(t.toolLabels[id], settings.activeTool === id, () => {
+          settings = { ...settings, activeTool: id };
+          demoStageEl?.classList.toggle('snowman-active', id === 'snowman');
+          if (demoHintEl) {
+            demoHintEl.textContent = id === 'snowman' ? t.demoHintSnowman : t.demoHintDefault;
+          }
+          renderDemoControls();
+        })
+      );
     });
 
-    const groupGar = makeControlGroup('Гирлянды');
+    const groupGar = makeControlGroup(t.ctrlGarland);
     (['wave', 'twinkle', 'off'] as GarlandMode[]).forEach((id) => {
-      const b = makeSegBtn(GARLAND_MODE_LABELS[id], settings.garlandMode === id, () => {
-        settings = { ...settings, garlandMode: id };
-        renderControls();
-      });
-      groupGar.appendChild(b);
+      groupGar.appendChild(
+        makeSegBtn(t.garlandLabels[id], settings.garlandMode === id, () => {
+          settings = { ...settings, garlandMode: id };
+          renderDemoControls();
+        })
+      );
     });
 
-    // Wind group
     const groupWind = document.createElement('div');
     groupWind.className = 'demo-ctrl-group';
-    groupWind.innerHTML = `<span class="demo-ctrl-lbl">Ветер</span>`;
+    groupWind.innerHTML = `<span class="demo-ctrl-lbl">${t.ctrlWind}</span>`;
     const windRange = document.createElement('input');
     windRange.type = 'range';
     windRange.min = '-1';
@@ -477,12 +560,11 @@ export function mountLandingSite(
     });
     groupWind.appendChild(windRange);
 
-    // Plow + Actions group
-    const groupPlow = makeControlGroup('Снегоуборщик');
+    const groupPlow = makeControlGroup(t.ctrlPlow);
     for (const meta of PLOW_STYLES) {
       const b = makeSegBtn(meta.icon, settings.plowStyle === meta.id, () => {
         settings = { ...settings, plowStyle: meta.id };
-        renderControls();
+        renderDemoControls();
         if (meta.id === 'custom' && !settings.customPlowDataUrl) {
           fileInput.click();
         } else {
@@ -495,7 +577,7 @@ export function mountLandingSite(
     const triggerBtn = document.createElement('button');
     triggerBtn.type = 'button';
     triggerBtn.className = 'sf-btn sf-btn-mini sf-btn-primary';
-    triggerBtn.textContent = '▶ Пустить';
+    triggerBtn.textContent = t.ctrlLaunch;
     triggerBtn.addEventListener('click', () => sim.triggerPlowManually(true));
     groupPlow.appendChild(triggerBtn);
 
@@ -504,103 +586,127 @@ export function mountLandingSite(
     const clearBtn = document.createElement('button');
     clearBtn.type = 'button';
     clearBtn.className = 'sf-btn sf-btn-mini';
-    clearBtn.textContent = '❄️ Убрать снег';
+    clearBtn.textContent = t.ctrlClearSnow;
     clearBtn.addEventListener('click', () => sim.clearAllSnow());
 
     const clearManBtn = document.createElement('button');
     clearManBtn.type = 'button';
     clearManBtn.className = 'sf-btn sf-btn-mini';
-    clearManBtn.textContent = '🗑 Снеговики';
+    clearManBtn.textContent = t.ctrlClearSnowmen;
     clearManBtn.addEventListener('click', () => sim.clearSnowmen());
 
     const cabinBtn = document.createElement('button');
     cabinBtn.type = 'button';
     cabinBtn.className = `sf-btn sf-btn-mini ${settings.liveWallpaperEnabled ? 'sf-btn-primary' : ''}`;
-    cabinBtn.textContent = '🏡 Домик';
+    cabinBtn.textContent = t.ctrlCabin;
     cabinBtn.addEventListener('click', () => {
       settings = { ...settings, liveWallpaperEnabled: !settings.liveWallpaperEnabled };
       wallpaperCanvas.style.display = settings.liveWallpaperEnabled ? 'block' : 'none';
-      renderControls();
+      renderDemoControls();
     });
 
     groupAct.appendChild(clearBtn);
     groupAct.appendChild(clearManBtn);
     groupAct.appendChild(cabinBtn);
 
-    controlsRoot.appendChild(groupInt);
-    controlsRoot.appendChild(groupTool);
-    controlsRoot.appendChild(groupGar);
-    controlsRoot.appendChild(groupWind);
-    controlsRoot.appendChild(groupPlow);
-    controlsRoot.appendChild(groupAct);
-  };
+    controlsRootEl.appendChild(groupInt);
+    controlsRootEl.appendChild(groupTool);
+    controlsRootEl.appendChild(groupGar);
+    controlsRootEl.appendChild(groupWind);
+    controlsRootEl.appendChild(groupPlow);
+    controlsRootEl.appendChild(groupAct);
+  }
 
-  renderControls();
+  function setupDemoStage(): void {
+    controlsRootEl = page.querySelector('#demo-controls') as HTMLDivElement;
+    demoStageEl = page.querySelector('#demo-stage') as HTMLDivElement;
+    demoHintEl = page.querySelector('#demo-stage-hint') as HTMLDivElement;
 
-  // Setup draggable demo windows inside #demo-stage
-  const demoCards: DemoCard[] = [];
-  let zTop = 10;
-  demoStage.querySelectorAll('.demo-window').forEach((node) => {
-    const el = node as HTMLDivElement;
-    const id = el.dataset.winId || 'demo';
-    demoCards.push({ id, el });
+    demoCards.length = 0;
+    let zTop = 10;
+    demoStageEl.querySelectorAll('.demo-window').forEach((node) => {
+      const el = node as HTMLDivElement;
+      const id = el.dataset.winId || 'demo';
+      demoCards.push({ id, el });
 
-    let dragging = false;
-    let startX = 0;
-    let startY = 0;
-    let origX = 0;
-    let origY = 0;
+      let dragging = false;
+      let startX = 0;
+      let startY = 0;
+      let origX = 0;
+      let origY = 0;
 
-    el.addEventListener('pointerdown', (e) => {
-      if (settings.activeTool === 'snowman') return;
-      dragging = true;
-      el.setPointerCapture(e.pointerId);
-      const stageRect = demoStage.getBoundingClientRect();
-      const elRect = el.getBoundingClientRect();
-      origX = elRect.left - stageRect.left;
-      origY = elRect.top - stageRect.top;
-      el.style.right = 'auto';
-      el.style.left = `${origX}px`;
-      el.style.top = `${origY}px`;
-      startX = e.clientX;
-      startY = e.clientY;
-      el.style.zIndex = String(++zTop);
-      // Move to front in Z-order list
-      const idx = demoCards.findIndex((c) => c.el === el);
-      if (idx > 0) {
-        const [item] = demoCards.splice(idx, 1);
-        demoCards.unshift(item);
-      }
-      e.stopPropagation();
+      el.addEventListener('pointerdown', (e) => {
+        if (settings.activeTool === 'snowman') return;
+        dragging = true;
+        el.setPointerCapture(e.pointerId);
+        const stageRect = demoStageEl!.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+        origX = elRect.left - stageRect.left;
+        origY = elRect.top - stageRect.top;
+        el.style.right = 'auto';
+        el.style.left = `${origX}px`;
+        el.style.top = `${origY}px`;
+        startX = e.clientX;
+        startY = e.clientY;
+        el.style.zIndex = String(++zTop);
+        const idx = demoCards.findIndex((c) => c.el === el);
+        if (idx > 0) {
+          const [item] = demoCards.splice(idx, 1);
+          demoCards.unshift(item);
+        }
+        e.stopPropagation();
+      });
+
+      el.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const stageRect = demoStageEl!.getBoundingClientRect();
+        const maxX = Math.max(8, stageRect.width - el.offsetWidth - 8);
+        const maxY = Math.max(44, stageRect.height - el.offsetHeight - 12);
+        const nx = Math.max(8, Math.min(maxX, origX + (e.clientX - startX)));
+        const ny = Math.max(44, Math.min(maxY, origY + (e.clientY - startY)));
+        el.style.left = `${nx}px`;
+        el.style.top = `${ny}px`;
+        e.stopPropagation();
+      });
+
+      const stopDrag = (e: PointerEvent) => {
+        if (!dragging) return;
+        dragging = false;
+        try {
+          el.releasePointerCapture(e.pointerId);
+        } catch {
+          // ignore
+        }
+      };
+      el.addEventListener('pointerup', stopDrag);
+      el.addEventListener('pointercancel', stopDrag);
     });
 
-    el.addEventListener('pointermove', (e) => {
-      if (!dragging) return;
-      const stageRect = demoStage.getBoundingClientRect();
-      const maxX = Math.max(8, stageRect.width - el.offsetWidth - 8);
-      const maxY = Math.max(44, stageRect.height - el.offsetHeight - 12);
-      const nx = Math.max(8, Math.min(maxX, origX + (e.clientX - startX)));
-      const ny = Math.max(44, Math.min(maxY, origY + (e.clientY - startY)));
-      el.style.left = `${nx}px`;
-      el.style.top = `${ny}px`;
-      e.stopPropagation();
-    });
-
-    const stopDrag = (e: PointerEvent) => {
-      if (!dragging) return;
-      dragging = false;
+    demoStageEl.addEventListener('pointerdown', (e) => {
+      if (settings.activeTool !== 'snowman') return;
+      rollingPointerId = e.pointerId;
       try {
-        el.releasePointerCapture(e.pointerId);
+        demoStageEl!.setPointerCapture(e.pointerId);
       } catch {
         // ignore
       }
-    };
-    el.addEventListener('pointerup', stopDrag);
-    el.addEventListener('pointercancel', stopDrag);
-  });
+      sim.beginRollingBall({ x: e.clientX, y: window.innerHeight - e.clientY });
+    });
 
-  // Pointer interactions: mitten hover anywhere on page + snowman rolling inside demoStage
-  let rollingPointerId: number | null = null;
+    demoStageEl.addEventListener('pointermove', (e) => {
+      if (settings.activeTool === 'snowman' && rollingPointerId === e.pointerId) {
+        sim.continueRollingBall({ x: e.clientX, y: window.innerHeight - e.clientY });
+      }
+    });
+
+    const endRoll = (e: PointerEvent) => {
+      if (rollingPointerId !== e.pointerId) return;
+      rollingPointerId = null;
+      sim.releaseRollingBall();
+    };
+    demoStageEl.addEventListener('pointerup', endRoll);
+    demoStageEl.addEventListener('pointercancel', endRoll);
+  }
 
   window.addEventListener('pointermove', (e) => {
     if (settings.activeTool === 'mitten') {
@@ -608,32 +714,6 @@ export function mountLandingSite(
     }
   });
 
-  demoStage.addEventListener('pointerdown', (e) => {
-    if (settings.activeTool !== 'snowman') return;
-    rollingPointerId = e.pointerId;
-    try {
-      demoStage.setPointerCapture(e.pointerId);
-    } catch {
-      // ignore
-    }
-    sim.beginRollingBall({ x: e.clientX, y: window.innerHeight - e.clientY });
-  });
-
-  demoStage.addEventListener('pointermove', (e) => {
-    if (settings.activeTool === 'snowman' && rollingPointerId === e.pointerId) {
-      sim.continueRollingBall({ x: e.clientX, y: window.innerHeight - e.clientY });
-    }
-  });
-
-  const endRoll = (e: PointerEvent) => {
-    if (rollingPointerId !== e.pointerId) return;
-    rollingPointerId = null;
-    sim.releaseRollingBall();
-  };
-  demoStage.addEventListener('pointerup', endRoll);
-  demoStage.addEventListener('pointercancel', endRoll);
-
-  // Sync window positions of demoCards into SnowSimulation
   const captureDemoSnapshot = (): WindowSnapshot => {
     const vh = window.innerHeight;
     const windows: TrackedWindow[] = [];
@@ -662,7 +742,30 @@ export function mountLandingSite(
   };
   window.addEventListener('resize', handleResize);
 
-  // Pre-seed a gentle amount of snow on demo windows so visitors immediately see snowdrifts
+  // Initial render & check auto-unlock from URL (?unlock=CODE) or saved code
+  renderPage();
+
+  const urlCode = new URLSearchParams(window.location.search).get('unlock');
+  let savedCode: string | null = null;
+  try {
+    savedCode = localStorage.getItem(UNLOCK_STORAGE_KEY);
+  } catch {
+    savedCode = null;
+  }
+  const candidateCode = urlCode || savedCode;
+  if (candidateCode) {
+    void verifyUnlockCode(candidateCode).then((res) => {
+      if (res) {
+        downloads = res;
+        renderPage();
+        if (urlCode) {
+          page.querySelector('#download')?.scrollIntoView({ behavior: 'smooth' });
+        }
+      }
+    });
+  }
+
+  // Pre-seed gentle snowdrifts on demo windows
   sim.syncWindows(captureDemoSnapshot(), false, performance.now() * 0.001);
   for (const [, surf] of sim.surfaces) {
     const step = surf.binWidth;
@@ -708,19 +811,4 @@ function makeSegBtn(label: string, active: boolean, onClick: () => void): HTMLBu
   b.textContent = label;
   b.addEventListener('click', onClick);
   return b;
-}
-
-function getPrimaryCTA(os: DetectedOS): { label: string; href: string; isAnchor?: boolean } {
-  switch (os) {
-    case 'mac':
-      return { label: '⬇ Скачать для Mac (.pkg)', href: DOWNLOAD_URLS.macPkg };
-    case 'windows':
-      return { label: '⬇ Скачать для Windows (.exe)', href: DOWNLOAD_URLS.winExe };
-    case 'android':
-      return { label: '⬇ Скачать для Android (.apk)', href: DOWNLOAD_URLS.androidApk };
-    case 'ios':
-      return { label: '📲 Установить на iPhone / iPad', href: '#download', isAnchor: true };
-    case 'linux':
-      return { label: '⬇ Скачать для Linux (.deb)', href: DOWNLOAD_URLS.linuxDeb };
-  }
 }
