@@ -313,6 +313,38 @@ export class SettingsPanel {
     plowSec.appendChild(plowWinRow.el);
     body.appendChild(plowSec);
 
+    if (window.SnowFlakeAndroid) {
+      body.appendChild(this.makeDivider());
+      const androidSec = this.makeSection('Android: рабочий стол и оверлей');
+      const overlayBtn = document.createElement('button');
+      overlayBtn.type = 'button';
+      overlayBtn.className = 'sf-btn sf-btn-small sf-full-w';
+      const syncOverlayText = () => {
+        const running = window.SnowFlakeAndroid?.isOverlayRunning() ?? false;
+        overlayBtn.textContent = running
+          ? '⏹ Выключить снег поверх всех экранов'
+          : '❄️ Снег поверх всех приложений';
+        overlayBtn.classList.toggle('sf-btn-primary', running);
+      };
+      syncOverlayText();
+      overlayBtn.addEventListener('click', () => {
+        window.SnowFlakeAndroid?.toggleOverlay();
+        setTimeout(syncOverlayText, 120);
+      });
+
+      const wallpaperBtn = document.createElement('button');
+      wallpaperBtn.type = 'button';
+      wallpaperBtn.className = 'sf-btn sf-btn-small sf-full-w';
+      wallpaperBtn.textContent = '🏡 Живые обои рабочего стола';
+      wallpaperBtn.addEventListener('click', () => {
+        window.SnowFlakeAndroid?.openLiveWallpaperPicker();
+      });
+
+      androidSec.appendChild(overlayBtn);
+      androidSec.appendChild(wallpaperBtn);
+      body.appendChild(androidSec);
+    }
+
     if (isDesktopElectron) {
       body.appendChild(this.makeDivider());
       const sysSec = document.createElement('div');

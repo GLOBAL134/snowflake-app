@@ -17,9 +17,16 @@ export interface ElectronAPI {
   openSandboxWindow: () => void;
 }
 
+export interface AndroidSnowBridge {
+  isOverlayRunning: () => boolean;
+  toggleOverlay: () => boolean;
+  openLiveWallpaperPicker: () => void;
+}
+
 declare global {
   interface Window {
     snowflakeElectron?: ElectronAPI;
+    SnowFlakeAndroid?: AndroidSnowBridge;
     Capacitor?: {
       isNativePlatform?: () => boolean;
       getPlatform?: () => string;
