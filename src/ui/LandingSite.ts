@@ -334,8 +334,8 @@ export function mountLandingSite(
               </div>
               <p class="dl-desc">${t.dlIosDesc}</p>
               <div class="dl-actions">
-                <button type="button" class="sf-btn sf-btn-primary dl-btn sf-ios-guide-btn">${t.dlIosGuideBtn}</button>
-                ${renderDownloadAction(unlocked ? downloads!.iosIpa : null, t.dlIosIpa, t.dlLockedBtnPrefix, false)}
+                <button type="button" class="sf-btn dl-btn" disabled style="opacity: 0.72; cursor: default;">${t.dlIosGuideBtn}</button>
+                <button type="button" class="sf-btn dl-btn-sec sf-ios-web-btn">${t.dlIosIpa}</button>
               </div>
             </div>
 
@@ -494,9 +494,7 @@ export function mountLandingSite(
       }
       iosModal.classList.remove('hidden');
     };
-    page.querySelector('.sf-ios-guide-btn')?.addEventListener('click', () => {
-      iosModal.classList.remove('hidden');
-    });
+    page.querySelector('.sf-ios-web-btn')?.addEventListener('click', openFullscreen);
     page.querySelector('.sf-pwa-trigger')?.addEventListener('click', () => void openInstallHelper());
     page.querySelector('#sf-pwa-install-btn')?.addEventListener('click', () => void openInstallHelper());
     page.querySelector('#ios-modal-close')?.addEventListener('click', () => iosModal.classList.add('hidden'));
